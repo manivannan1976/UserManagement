@@ -1,0 +1,52 @@
+<main class="activation-page">
+  <section class="activation-card" aria-labelledby="activation-title">
+    <p class="eyebrow">S|2 PORTAL</p>
+    @if (loading) {
+      <h1 id="activation-title">Checking invitation</h1>
+      <p>{{ stateMessage }}</p>
+    } @else if (success) {
+      <h1 id="activation-title">Account Activated</h1>
+      <p>Your account is active. You can now sign in.</p>
+    } @else if (state !== 'valid') {
+      <h1 id="activation-title">Invitation unavailable</h1>
+      <p role="alert">{{ stateMessage }}</p>
+      <button mat-button type="button" (click)="goToLogin()">Go to Sign In</button>
+    } @else {
+      <h1 id="activation-title">Activate your account</h1>
+      <p>Set a password for <strong>{{ email }}</strong>.</p>
+
+      @if (errorMessage) {
+        <div class="form-error" role="alert">{{ errorMessage }}</div>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="activate()">
+        <mat-form-field appearance="outline">
+          <mat-label>Password</mat-label>
+          <input matInput [type]="showPassword ? 'text' : 'password'" formControlName="password" autocomplete="new-password" maxlength="256" />
+          @if (form.controls.password.touched && form.controls.password.invalid) {
+            <mat-error>Use 12+ characters, uppercase and lowercase letters, a number, and a symbol.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Confirm Password</mat-label>
+          <input matInput [type]="showPassword ? 'text' : 'password'" formControlName="confirmPassword" autocomplete="new-password" maxlength="256" />
+          @if (form.controls.confirmPassword.touched && form.hasError('passwordMismatch')) {
+            <mat-error>Passwords do not match.</mat-error>
+          } @else if (form.controls.confirmPassword.touched && form.controls.confirmPassword.hasError('required')) {
+            <mat-error>Confirm your password.</mat-error>
+          }
+        </mat-form-field>
+
+        <label class="show-password">
+          <input type="checkbox" [(ngModel)]="showPassword" [ngModelOptions]="{standalone: true}" />
+          Show password
+        </label>
+        <p class="password-hint">At least 12 characters with uppercase, lowercase, number, and symbol.</p>
+        <button mat-flat-button color="primary" type="submit" [disabled]="submitting">
+          {{ submitting ? 'Activating...' : 'Activate Account' }}
+        </button>
+      </form>
+    }
+  </section>
+</main>

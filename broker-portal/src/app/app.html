@@ -1,0 +1,30 @@
+<header class="portal-header" *ngIf="isAuthenticated$ | async">
+  <a class="portal-logo" routerLink="/users" aria-label="BHSI Small Commercial home">
+    <img
+      src="/assets/bhsi-small-commercial-logo.png"
+      alt="BHSI Small Commercial"
+      width="200"
+      height="120"
+    />
+  </a>
+
+  <nav class="portal-navigation" aria-label="Main navigation">
+    <span class="navigation-item">Underwriting Guidelines</span>
+    <a
+      class="navigation-item"
+      routerLink="/users"
+      routerLinkActive="navigation-item-active"
+      ariaCurrentWhenActive="page"
+    >
+      User Management
+    </a>
+    <span class="navigation-item">Moratorium</span>
+  </nav>
+
+  <div class="account-actions">
+    <span class="account-email" *ngIf="email$ | async as email">{{ email }}</span>
+    <button mat-button type="button" (click)="logout()">Sign Out</button>
+  </div>
+</header>
+<p *ngIf="logoutError" class="logout-error" role="alert">{{ logoutError }}</p>
+<router-outlet></router-outlet>

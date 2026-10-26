@@ -1,0 +1,72 @@
+<h2 mat-dialog-title>Invite User</h2>
+
+<form [formGroup]="form" (ngSubmit)="submit()">
+  <mat-dialog-content class="invite-form">
+    <p class="form-intro">Add a broker user to the portal. This saves an invitation record only.</p>
+
+    <div class="name-fields">
+      <mat-form-field appearance="outline">
+        <mat-label>First Name</mat-label>
+        <input matInput formControlName="firstName" maxlength="100" autocomplete="given-name" />
+        @if (form.controls.firstName.hasError('required') && form.controls.firstName.touched) {
+          <mat-error>First name is required.</mat-error>
+        } @else if (form.controls.firstName.hasError('maxlength')) {
+          <mat-error>Maximum 100 characters.</mat-error>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>Last Name</mat-label>
+        <input matInput formControlName="lastName" maxlength="100" autocomplete="family-name" />
+        @if (form.controls.lastName.hasError('required') && form.controls.lastName.touched) {
+          <mat-error>Last name is required.</mat-error>
+        } @else if (form.controls.lastName.hasError('maxlength')) {
+          <mat-error>Maximum 100 characters.</mat-error>
+        }
+      </mat-form-field>
+    </div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Email</mat-label>
+      <input matInput formControlName="email" maxlength="256" type="email" autocomplete="email" />
+      @if (form.controls.email.hasError('required') && form.controls.email.touched) {
+        <mat-error>Email is required.</mat-error>
+      } @else if (form.controls.email.hasError('email')) {
+        <mat-error>Enter a valid email address.</mat-error>
+      } @else if (form.controls.email.hasError('maxlength')) {
+        <mat-error>Maximum 256 characters.</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Job Title (optional)</mat-label>
+      <input matInput formControlName="jobTitle" maxlength="150" />
+      @if (form.controls.jobTitle.hasError('maxlength')) {
+        <mat-error>Maximum 150 characters.</mat-error>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Role</mat-label>
+      <mat-select formControlName="role">
+        @for (role of roles; track role.value) {
+          <mat-option [value]="role.value">{{ role.label }}</mat-option>
+        }
+      </mat-select>
+      @if (form.controls.role.hasError('required') && form.controls.role.touched) {
+        <mat-error>Select a role.</mat-error>
+      }
+    </mat-form-field>
+
+    @if (errorMessage) {
+      <div class="api-error" role="alert">{{ errorMessage }}</div>
+    }
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button type="button" [disabled]="submitting" mat-dialog-close>Cancel</button>
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting">
+      {{ submitting ? 'Saving...' : 'Send Invite' }}
+    </button>
+  </mat-dialog-actions>
+</form>

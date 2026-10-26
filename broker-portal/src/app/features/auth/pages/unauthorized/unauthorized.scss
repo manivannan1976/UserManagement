@@ -1,0 +1,76 @@
+:host {
+  display: block;
+  min-height: 100vh;
+}
+
+.denied-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+  box-sizing: border-box;
+  background: #f5f7fb;
+}
+
+.denied-card {
+  width: min(100%, 520px);
+  padding: 44px;
+  border: 1px solid #e5e9f1;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 18px 55px rgb(23 32 51 / 8%);
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.denied-mark {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 20px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff0e5;
+  color: #b65b16;
+  font-size: 27px;
+  font-weight: 700;
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+}
+
+h1 {
+  margin: 0;
+  color: #172033;
+  font-size: 27px;
+}
+
+.denied-card > p:not(.eyebrow, .alert) {
+  margin: 14px 0 26px;
+  color: #68758a;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.actions {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.alert {
+  color: #9e2828;
+  font-size: 13px;
+}
+
+@media (max-width: 520px) {
+  .denied-card {
+    padding: 34px 24px;
+  }
+}

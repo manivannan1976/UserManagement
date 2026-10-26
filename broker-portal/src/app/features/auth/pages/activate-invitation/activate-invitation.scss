@@ -1,0 +1,71 @@
+.activation-page {
+  display: grid;
+  min-height: calc(100vh - 160px);
+  place-items: center;
+  padding: 24px;
+  background: #f5f7fb;
+}
+
+.activation-card {
+  width: min(100%, 480px);
+  padding: 36px;
+  border: 1px solid #e5e9f1;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 18px 55px rgb(23 32 51 / 8%);
+}
+
+.eyebrow {
+  color: #174c70;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+h1 {
+  margin: 12px 0;
+  color: #172033;
+}
+
+p {
+  color: #68758a;
+  line-height: 1.5;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+mat-form-field,
+button {
+  width: 100%;
+}
+
+.show-password {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #35435c;
+  font-size: 13px;
+}
+
+.password-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.form-error {
+  padding: 12px;
+  border-radius: 6px;
+  background: #fff4f4;
+  color: #9e2828;
+}
+
+@media (max-width: 600px) {
+  .activation-card {
+    padding: 28px 20px;
+  }
+}

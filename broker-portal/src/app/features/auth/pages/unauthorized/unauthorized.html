@@ -1,0 +1,15 @@
+<main class="denied-page">
+  <section class="denied-card" aria-labelledby="denied-title">
+    <div class="denied-mark" aria-hidden="true">!</div>
+    <p class="eyebrow">BROKER PORTAL</p>
+    <h1 id="denied-title">Access Denied</h1>
+    <p>
+      Your account does not have permission to access this page. If you believe
+      you should have access, contact your portal administrator.
+    </p>
+    <div class="actions">
+      <button mat-flat-button color="primary" type="button" (click)="logout()">Sign out</button>
+      <a mat-button routerLink="/home">Go to portal home</a>
+    </div>
+  </section>
+</main>

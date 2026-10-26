@@ -1,0 +1,136 @@
+.logout-error {
+  margin: 0;
+  padding: 10px 24px;
+  background: #fff4f4;
+  color: #9e2828;
+}
+
+.portal-header {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  min-height: 160px;
+  padding: 16px clamp(20px, 4.6vw, 72px);
+  box-sizing: border-box;
+  border-bottom: 1px solid #dce3eb;
+  background: #fff;
+}
+
+.portal-logo {
+  display: flex;
+  flex: 0 0 200px;
+  align-items: center;
+  width: 200px;
+  height: 120px;
+  text-decoration: none;
+}
+
+.portal-logo img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.portal-navigation {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  min-width: 0;
+}
+
+.navigation-item {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  padding: 0 14px;
+  border-radius: 7px;
+  color: #174c70;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.25;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.navigation-item-active {
+  background: #eaf5fc;
+}
+
+.portal-navigation a:hover {
+  background: #f1f7fb;
+}
+
+.account-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  color: #174c70;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.account-actions button {
+  color: #174c70;
+}
+
+@media (max-width: 1050px) {
+  .portal-header {
+    gap: 20px;
+    padding-right: 24px;
+    padding-left: 24px;
+  }
+
+  .portal-navigation {
+    gap: 12px;
+  }
+
+  .navigation-item {
+    padding: 0 10px;
+    font-size: 14px;
+  }
+
+  .account-actions {
+    gap: 6px;
+  }
+}
+
+@media (max-width: 760px) {
+  .portal-header {
+    min-height: 0;
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding: 10px 16px 14px;
+  }
+
+  .portal-logo {
+    flex-basis: 160px;
+    width: 160px;
+    height: 96px;
+  }
+
+  .portal-navigation {
+    order: 3;
+    width: 100%;
+    gap: 4px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .navigation-item {
+    min-height: 40px;
+    padding: 0 10px;
+    font-size: 13px;
+  }
+
+  .account-actions {
+    margin-left: auto;
+  }
+
+  .account-email {
+    max-width: 38vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

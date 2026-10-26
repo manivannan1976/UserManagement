@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "BrokerPortal.Api": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51273;http://localhost:51274"
+    }
+  }
+}

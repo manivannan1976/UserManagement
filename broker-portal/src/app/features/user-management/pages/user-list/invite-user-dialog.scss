@@ -1,0 +1,43 @@
+.invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: min(520px, 75vw);
+  padding-top: 8px;
+}
+
+.form-intro {
+  margin: 0 0 8px;
+  color: #68758a;
+  font-size: 13px;
+}
+
+.name-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+mat-form-field {
+  width: 100%;
+}
+
+.api-error {
+  padding: 12px 14px;
+  border: 1px solid #f1caca;
+  border-radius: 8px;
+  background: #fff4f4;
+  color: #9e2828;
+  font-size: 13px;
+}
+
+@media (max-width: 600px) {
+  .invite-form {
+    min-width: 0;
+  }
+
+  .name-fields {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

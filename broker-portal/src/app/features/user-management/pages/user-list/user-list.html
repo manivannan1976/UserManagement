@@ -1,0 +1,376 @@
+<div class="user-management-page">
+
+  <!-- Page header -->
+  <header class="page-header">
+    <div>
+      <div class="eyebrow">S|2 PORTAL / ADMINISTRATION</div>
+
+      <h1>User Management</h1>
+
+      <p class="page-description">
+        Manage broker users and portal access.
+      </p>
+    </div>
+
+    <button
+      mat-flat-button
+      color="primary"
+      type="button"
+      (click)="onInviteUser()"
+    >
+      <mat-icon>person_add</mat-icon>
+      Invite User
+    </button>
+  </header>
+
+  <!-- Summary cards -->
+  <section class="summary-grid" aria-label="User statistics">
+
+    <article class="summary-card">
+      <div class="summary-icon total-icon">
+        <mat-icon>group</mat-icon>
+      </div>
+
+      <div>
+        <p>Total Users</p>
+        <h2>{{ totalUsers }}</h2>
+      </div>
+    </article>
+
+    <article class="summary-card">
+      <div class="summary-icon active-icon">
+        <mat-icon>check_circle</mat-icon>
+      </div>
+
+      <div>
+        <p>Active Users</p>
+        <h2>{{ activeUsers }}</h2>
+      </div>
+    </article>
+
+    <article class="summary-card">
+      <div class="summary-icon invited-icon">
+        <mat-icon>mail</mat-icon>
+      </div>
+
+      <div>
+        <p>Pending Invitations</p>
+        <h2>{{ pendingUsers }}</h2>
+      </div>
+    </article>
+
+    <article class="summary-card">
+      <div class="summary-icon incomplete-icon">
+        <mat-icon>warning</mat-icon>
+      </div>
+
+      <div>
+        <p>Setup Incomplete</p>
+        <h2>{{ incompleteUsers }}</h2>
+      </div>
+    </article>
+
+  </section>
+
+  <!-- Search and filters -->
+  <section class="users-panel">
+
+    <div class="panel-heading">
+      <div>
+        <h2>All Users</h2>
+
+        <p>
+          View and manage users across broker agencies.
+        </p>
+      </div>
+
+      <span class="result-count">
+        {{ totalCount }} users
+      </span>
+    </div>
+
+    <div class="filter-toolbar">
+
+      <mat-form-field
+        appearance="outline"
+        class="search-field"
+        subscriptSizing="dynamic"
+      >
+        <mat-label>Search users</mat-label>
+
+        <mat-icon matPrefix>search</mat-icon>
+
+        <input
+          matInput
+          [(ngModel)]="searchText"
+          (ngModelChange)="onFiltersChanged()"
+          placeholder="Search by name or email"
+        />
+
+        <button
+          *ngIf="searchText"
+          matSuffix
+          mat-icon-button
+          type="button"
+          aria-label="Clear search"
+          (click)="searchText = ''; onFiltersChanged()"
+        >
+          <mat-icon>close</mat-icon>
+        </button>
+      </mat-form-field>
+
+      <mat-form-field
+        appearance="outline"
+        class="status-field"
+        subscriptSizing="dynamic"
+      >
+        <mat-label>Filter by status</mat-label>
+
+        <mat-select
+          [(ngModel)]="selectedStatus"
+          (ngModelChange)="onFiltersChanged()"
+        >
+
+          <mat-option value="All">All statuses</mat-option>
+          <mat-option value="Active">Active</mat-option>
+          <mat-option value="Invited">Invited</mat-option>
+          <mat-option value="Expired">Expired</mat-option>
+          <mat-option value="Deactivated">Deactivated</mat-option>
+          <mat-option value="Setup Incomplete">
+            Setup Incomplete
+          </mat-option>
+
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field
+        appearance="outline"
+        class="status-field"
+        subscriptSizing="dynamic"
+      >
+        <mat-label>Filter by role</mat-label>
+
+        <mat-select
+          [(ngModel)]="selectedRole"
+          (ngModelChange)="onFiltersChanged()"
+        >
+          <mat-option value="All">All roles</mat-option>
+          <mat-option value="PORTAL_SUPER_ADMIN">Portal Super Admin</mat-option>
+          <mat-option value="UNDERWRITER">Underwriter</mat-option>
+          <mat-option value="UNDERWRITER_MANAGER">Underwriter Manager</mat-option>
+          <mat-option value="BROKER_ADMIN">Broker Admin</mat-option>
+          <mat-option value="BROKER_USER">Broker User</mat-option>
+        </mat-select>
+      </mat-form-field>
+
+      <button
+        mat-button
+        type="button"
+        (click)="clearFilters()"
+      >
+        Clear filters
+      </button>
+
+    </div>
+
+    <div *ngIf="loading" class="load-message" role="status">
+      Loading users...
+    </div>
+
+    <div *ngIf="error" class="error-message" role="alert">
+      {{ error }}
+      <button mat-button type="button" (click)="onFiltersChanged()">Retry</button>
+    </div>
+
+    <div
+      *ngIf="message"
+      class="feedback-message"
+      #invitationFeedback
+      role="status"
+    >
+      <div>
+        <p>{{ message }}</p>
+        <a
+          *ngIf="activationPreviewUrl as activationUrl"
+          [href]="activationUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open development activation link
+        </a>
+        <details *ngIf="emailPreviewHtml">
+          <summary>Development email preview (HTML source)</summary>
+          <pre>{{ emailPreviewHtml }}</pre>
+        </details>
+      </div>
+
+      <button
+        mat-button
+        type="button"
+        (click)="message = ''"
+      >
+        Dismiss
+      </button>
+    </div>
+
+    <!-- User table -->
+    <div class="table-container">
+
+      <table class="users-table">
+
+        <thead>
+          <tr>
+            <th scope="col">USER</th>
+            <th scope="col">ROLE</th>
+            <th scope="col">JOB TITLE</th>
+            <th scope="col">STATUS</th>
+            <th scope="col">CREATED</th>
+            <th scope="col">ACTIONS</th>
+          </tr>
+        </thead>
+
+        <tbody>
+
+          <tr *ngFor="let user of filteredUsers">
+
+            <td>
+              <div class="user-cell">
+
+                <div class="avatar">
+                  {{ user.firstName.charAt(0) }}{{ user.lastName.charAt(0) }}
+                </div>
+
+                <div class="user-info">
+                  <span class="user-name">
+                    {{ user.firstName }} {{ user.lastName }}
+                  </span>
+
+                  <span class="user-email">
+                    {{ user.email }}
+                  </span>
+
+                  <span class="user-id">
+                    ID: {{ user.id }}
+                  </span>
+                </div>
+
+              </div>
+            </td>
+
+            <td>
+              <span class="role-label">
+                {{ user.role }}
+              </span>
+            </td>
+
+            <td>
+              <span class="agency-name">
+                {{ user.jobTitle || 'Not specified' }}
+              </span>
+            </td>
+
+            <td>
+              <span
+                class="status-badge"
+                [ngClass]="getStatusClass(user.status)"
+              >
+                <span class="status-dot"></span>
+                {{ user.status }}
+              </span>
+            </td>
+
+            <td>
+              <span class="created-date">
+                {{ user.createdAt | date: 'dd MMM yyyy' }}
+              </span>
+            </td>
+
+            <td class="user-actions">
+              <button
+                mat-icon-button
+                type="button"
+                aria-label="View user details"
+                title="View user details"
+                (click)="onViewUser(user)"
+              >
+                <mat-icon>visibility</mat-icon>
+              </button>
+              <button
+                *ngIf="isInvitationPending(user)"
+                mat-button
+                type="button"
+                class="resend-invitation-button"
+                aria-label="Resend user invitation"
+                title="Resend invitation"
+                (click)="resendInvitation(user)"
+              >
+                Resend
+              </button>
+            </td>
+
+          </tr>
+
+          <!-- Empty state -->
+          <tr *ngIf="!loading && !error && filteredUsers.length === 0">
+
+            <td colspan="6">
+              <div class="empty-state">
+
+                <mat-icon>person_search</mat-icon>
+
+                <h3>No users found</h3>
+
+                <p>Try changing the search text or selected filters.</p>
+
+                <button
+                  mat-button
+                  color="primary"
+                  type="button"
+                  (click)="clearFilters()"
+                >
+                  Clear filters
+                </button>
+
+              </div>
+            </td>
+
+          </tr>
+
+        </tbody>
+
+      </table>
+
+    </div>
+
+    <footer class="table-footer">
+      <span>Showing {{ rangeStart }}-{{ rangeEnd }} of {{ totalUsers }} users</span>
+      <div class="pagination-controls" aria-label="User list pagination">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic">
+          <mat-label>Rows per page</mat-label>
+          <mat-select [(ngModel)]="pageSize" (ngModelChange)="onPageSizeChanged()">
+            <mat-option *ngFor="let size of pageSizes" [value]="size">{{ size }}</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <span>Page {{ page }} of {{ totalPages }}</span>
+        <button
+          mat-button
+          type="button"
+          [disabled]="page <= 1 || loading"
+          (click)="goToPage(page - 1)"
+        >
+          Previous
+        </button>
+        <button
+          mat-button
+          type="button"
+          [disabled]="page >= totalPages || loading"
+          (click)="goToPage(page + 1)"
+        >
+          Next
+        </button>
+      </div>
+    </footer>
+
+  </section>
+
+</div>

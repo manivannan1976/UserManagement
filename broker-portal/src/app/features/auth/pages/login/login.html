@@ -1,0 +1,53 @@
+<main class="login-page">
+  <section class="login-card" aria-labelledby="login-title">
+    <div class="brand-mark" aria-hidden="true">S|2</div>
+    <p class="eyebrow">S|2 PORTAL</p>
+    <h1 id="login-title">Welcome back</h1>
+    <p class="intro">Sign in to access the Broker Portal.</p>
+
+    <div class="alert" *ngIf="errorMessage" role="alert">{{ errorMessage }}</div>
+
+    <form #loginForm="ngForm" (ngSubmit)="signIn(loginForm)" novalidate>
+      <label for="email">Email</label>
+      <input
+        id="email"
+        name="email"
+        type="email"
+        autocomplete="username"
+        [(ngModel)]="email"
+        #emailField="ngModel"
+        required
+        email
+        [disabled]="isLoading"
+      />
+      <span class="field-error" *ngIf="submitted && emailField.errors?.['required']">
+        Enter your email address.
+      </span>
+      <span class="field-error" *ngIf="submitted && emailField.errors?.['email']">
+        Enter a valid email address.
+      </span>
+
+      <label for="password">Password</label>
+      <input
+        id="password"
+        name="password"
+        type="password"
+        autocomplete="current-password"
+        [(ngModel)]="password"
+        #passwordField="ngModel"
+        required
+        [disabled]="isLoading"
+      />
+      <span class="field-error" *ngIf="submitted && passwordField.errors?.['required']">
+        Enter your password.
+      </span>
+
+      <button class="sso-button" type="submit" [disabled]="isLoading">
+        <span class="spinner" *ngIf="isLoading"></span>
+        {{ isLoading ? 'Signing in...' : 'Sign In' }}
+      </button>
+    </form>
+
+    <p class="security-note">Use the account credentials provided by your portal administrator.</p>
+  </section>
+</main>
