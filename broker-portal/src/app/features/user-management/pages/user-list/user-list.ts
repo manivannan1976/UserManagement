@@ -21,13 +21,16 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 
 import {
+  Agency,
   InvitationCreatedResponse,
   PagedUsersResponse,
   PortalUser,
+  ROLE_LABELS,
   UserStatus
 } from '../../models/user';
 import { UserManagementService, UserQuery } from '../../services/user-managemen';
-import { InviteUserDialog } from './invite-user-dialog';
+import { InviteDialogResult, InviteUserDialog } from './invite-user-dialog';
+import { AccountSessionService } from '../../../../core/auth/account-session.service';
 
 @Component({
   selector: 'app-user-list',
@@ -50,6 +53,7 @@ export class UserListComponent implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
   private readonly changeDetector = inject(ChangeDetectorRef);
+  private readonly session = inject(AccountSessionService);
   private readonly queryChanges = new Subject<UserQuery>();
 
   @ViewChild('invitationFeedback')
@@ -58,6 +62,12 @@ export class UserListComponent implements OnInit {
   searchText = '';
   selectedStatus: UserStatus | 'All' = 'All';
   selectedRole = 'All';
+  selectedAgencyId: number | null = null;
+  agencies: Agency[] = [];
+  isSuperAdmin = false;
+  currentUserId: number | null = null;
+  agencyName: string | null = null;
+  readonly roleLabels = ROLE_LABELS;
   message = '';
   users: PortalUser[] = [];
   totalCount = 0;
@@ -72,6 +82,16 @@ export class UserListComponent implements OnInit {
   emailPreviewHtml: string | null = null;
 
   ngOnInit(): void {
+    this.session.checkSession().pipe(takeUntilDestroyed(this.destroyRef)).subscribe(user => {
+      this.isSuperAdmin = user?.role === 'PORTAL_SUPER_ADMIN';
+      this.currentUserId = user?.id ?? null;
+      this.agencyName = user?.agencyName ?? null;
+      if (this.isSuperAdmin) {
+        this.userService.getAgencies().pipe(takeUntilDestroyed(this.destroyRef))
+          .subscribe({ next: agencies => this.agencies = agencies, error: () => this.agencies = [] });
+      }
+    });
+
     this.queryChanges.pipe(
       debounceTime(250),
       distinctUntilChanged((previous, current) =>
@@ -80,6 +100,7 @@ export class UserListComponent implements OnInit {
         previous.search.trim() === current.search.trim() &&
         previous.status === current.status &&
         previous.role === current.role &&
+        previous.agencyId === current.agencyId &&
         previous.refreshKey === current.refreshKey
       ),
       switchMap(query => {
@@ -146,8 +167,68 @@ export class UserListComponent implements OnInit {
     return statusClasses[status];
   }
 
+  /** Pending and expired invitations can be resent without re-entering the user's data. */
   isInvitationPending(user: PortalUser): boolean {
-    return user.status.trim().toLowerCase() === 'invited';
+    const status = user.status.trim().toLowerCase();
+    return status === 'invited' || status === 'expired';
+  }
+
+  canDeactivate(user: PortalUser): boolean {
+    return user.status !== 'Deactivated' && user.role !== 'PORTAL_SUPER_ADMIN' &&
+      String(this.currentUserId) !== user.id;
+  }
+
+  canReactivate(user: PortalUser): boolean {
+    return user.status === 'Deactivated';
+  }
+
+  displayName(user: PortalUser): string {
+    const name = `${user.firstName} ${user.lastName}`.trim();
+    return name || 'Awaiting activation';
+  }
+
+  initials(user: PortalUser): string {
+    const letters = `${user.firstName.charAt(0)}${user.lastName.charAt(0)}`.trim();
+    return (letters || user.email.charAt(0)).toUpperCase();
+  }
+
+  deactivate(user: PortalUser): void {
+    const confirmed = window.confirm(
+      `Deactivate ${this.displayName(user)} (${user.email})?
+
+` +
+      'They will lose access to the portal immediately. You can reactivate them later.');
+    if (!confirmed) {
+      return;
+    }
+
+    this.userService.deactivateUser(user.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => this.afterStatusChange(`${user.email} was deactivated.`),
+      error: error => this.showActionError(error, 'The user could not be deactivated.')
+    });
+  }
+
+  reactivate(user: PortalUser): void {
+    this.userService.reactivateUser(user.id).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: () => this.afterStatusChange(`${user.email} was reactivated.`),
+      error: error => this.showActionError(error, 'The user could not be reactivated.')
+    });
+  }
+
+  private afterStatusChange(message: string): void {
+    this.message = message;
+    this.activationPreviewUrl = null;
+    this.emailPreviewHtml = null;
+    this.refreshKey++;
+    this.loadUsers();
+    this.scrollToInvitationFeedback();
+  }
+
+  private showActionError(error: unknown, fallback: string): void {
+    this.message = error instanceof HttpErrorResponse && typeof error.error?.message === 'string'
+      ? error.error.message
+      : fallback;
+    this.scrollToInvitationFeedback();
   }
 
   onFiltersChanged(): void {
@@ -172,6 +253,7 @@ export class UserListComponent implements OnInit {
     this.searchText = '';
     this.selectedStatus = 'All';
     this.selectedRole = 'All';
+    this.selectedAgencyId = null;
     this.message = '';
     this.onFiltersChanged();
   }
@@ -183,17 +265,14 @@ export class UserListComponent implements OnInit {
       disableClose: true
     }).afterClosed().pipe(
       takeUntilDestroyed(this.destroyRef)
-    ).subscribe(response => {
-      if (!response) {
+    ).subscribe((result: InviteDialogResult | undefined) => {
+      if (!result) {
         return;
       }
 
-      const user = response.user;
-      this.activationPreviewUrl = response.developmentActivationUrl;
-      this.emailPreviewHtml = response.developmentEmailPreviewHtml;
-      this.message = response.deliveryStatus === 'Sent'
-        ? `${user.firstName} ${user.lastName} was invited.`
-        : `${user.firstName} ${user.lastName} was saved as Invited. ${response.message ?? 'Email delivery did not complete.'}`;
+      this.activationPreviewUrl = result.activationUrl;
+      this.emailPreviewHtml = result.emailPreviewHtml;
+      this.message = result.message;
       this.searchText = '';
       this.selectedStatus = 'All';
       this.selectedRole = 'All';
@@ -221,8 +300,10 @@ export class UserListComponent implements OnInit {
         this.loadUsers();
         this.scrollToInvitationFeedback();
       },
-      error: () => {
-        this.message = 'The invitation could not be resent. Please try again.';
+      error: error => {
+        this.message = error instanceof HttpErrorResponse && typeof error.error?.message === 'string'
+          ? error.error.message
+          : 'The invitation could not be resent. Please try again.';
         this.scrollToInvitationFeedback();
       }
     });
@@ -242,6 +323,7 @@ export class UserListComponent implements OnInit {
       search: this.searchText,
       status: this.selectedStatus,
       role: this.selectedRole,
+      agencyId: this.selectedAgencyId,
       refreshKey: this.refreshKey
     });
   }

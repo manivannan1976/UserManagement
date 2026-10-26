@@ -1,50 +1,10 @@
-<h2 mat-dialog-title>Invite User</h2>
+<h2 mat-dialog-title>Invite Users</h2>
 
 <form [formGroup]="form" (ngSubmit)="submit()">
   <mat-dialog-content class="invite-form">
-    <p class="form-intro">Add a broker user to the portal. This saves an invitation record only.</p>
-
-    <div class="name-fields">
-      <mat-form-field appearance="outline">
-        <mat-label>First Name</mat-label>
-        <input matInput formControlName="firstName" maxlength="100" autocomplete="given-name" />
-        @if (form.controls.firstName.hasError('required') && form.controls.firstName.touched) {
-          <mat-error>First name is required.</mat-error>
-        } @else if (form.controls.firstName.hasError('maxlength')) {
-          <mat-error>Maximum 100 characters.</mat-error>
-        }
-      </mat-form-field>
-
-      <mat-form-field appearance="outline">
-        <mat-label>Last Name</mat-label>
-        <input matInput formControlName="lastName" maxlength="100" autocomplete="family-name" />
-        @if (form.controls.lastName.hasError('required') && form.controls.lastName.touched) {
-          <mat-error>Last name is required.</mat-error>
-        } @else if (form.controls.lastName.hasError('maxlength')) {
-          <mat-error>Maximum 100 characters.</mat-error>
-        }
-      </mat-form-field>
-    </div>
-
-    <mat-form-field appearance="outline">
-      <mat-label>Email</mat-label>
-      <input matInput formControlName="email" maxlength="256" type="email" autocomplete="email" />
-      @if (form.controls.email.hasError('required') && form.controls.email.touched) {
-        <mat-error>Email is required.</mat-error>
-      } @else if (form.controls.email.hasError('email')) {
-        <mat-error>Enter a valid email address.</mat-error>
-      } @else if (form.controls.email.hasError('maxlength')) {
-        <mat-error>Maximum 256 characters.</mat-error>
-      }
-    </mat-form-field>
-
-    <mat-form-field appearance="outline">
-      <mat-label>Job Title (optional)</mat-label>
-      <input matInput formControlName="jobTitle" maxlength="150" />
-      @if (form.controls.jobTitle.hasError('maxlength')) {
-        <mat-error>Maximum 150 characters.</mat-error>
-      }
-    </mat-form-field>
+    <p class="form-intro">
+      Enter one or more email addresses. Invitees confirm their own name when they activate.
+    </p>
 
     <mat-form-field appearance="outline">
       <mat-label>Role</mat-label>
@@ -53,20 +13,72 @@
           <mat-option [value]="role.value">{{ role.label }}</mat-option>
         }
       </mat-select>
-      @if (form.controls.role.hasError('required') && form.controls.role.touched) {
-        <mat-error>Select a role.</mat-error>
+    </mat-form-field>
+
+    @if (needsAgency) {
+      <mat-form-field appearance="outline">
+        <mat-label>Agency</mat-label>
+        <mat-select formControlName="agencyId" [disabled]="!isSuperAdmin || loadingAgencies">
+          @for (agency of agencies; track agency.id) {
+            <mat-option [value]="agency.id">{{ agency.name }}</mat-option>
+          }
+        </mat-select>
+        @if (!isSuperAdmin) {
+          <mat-hint>Your agency is applied automatically.</mat-hint>
+        }
+      </mat-form-field>
+
+      @if (selectedAgency; as agency) {
+        <p class="agency-hint">
+          Accepted domains:
+          @for (domain of agency.acceptedDomains; track domain) {
+            <strong>&#64;{{ domain }}</strong>{{ $last ? '' : ', ' }}
+          }
+          @if (agency.maxActiveUsers !== null) {
+            &middot; {{ agency.seatsUsed }} of {{ agency.maxActiveUsers }} user seats used
+          }
+        </p>
       }
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>Email addresses</mat-label>
+      <textarea
+        matInput
+        formControlName="emails"
+        rows="6"
+        placeholder="name&#64;company.com, other&#64;company.com — or one per line"
+        aria-describedby="email-count"
+      ></textarea>
+      <mat-hint id="email-count">
+        {{ parsedEmails.length }} {{ parsedEmails.length === 1 ? 'address' : 'addresses' }}
+        @if (invalidEmails.length > 0) {
+          &middot; {{ invalidEmails.length }} invalid
+        }
+      </mat-hint>
     </mat-form-field>
 
     @if (errorMessage) {
       <div class="api-error" role="alert">{{ errorMessage }}</div>
     }
+
+    @if (failures.length > 0) {
+      <ul class="failure-list" aria-label="Addresses that could not be invited">
+        @for (failure of failures; track failure.email) {
+          <li><strong>{{ failure.email }}</strong> &mdash; {{ failure.error }}</li>
+        }
+      </ul>
+    }
   </mat-dialog-content>
 
   <mat-dialog-actions align="end">
-    <button mat-button type="button" [disabled]="submitting" mat-dialog-close>Cancel</button>
-    <button mat-flat-button color="primary" type="submit" [disabled]="submitting">
-      {{ submitting ? 'Saving...' : 'Send Invite' }}
+    @if (failures.length > 0) {
+      <button mat-button type="button" [disabled]="submitting" (click)="done()">Done</button>
+    } @else {
+      <button mat-button type="button" [disabled]="submitting" mat-dialog-close>Cancel</button>
+    }
+    <button mat-flat-button color="primary" type="submit" [disabled]="submitting || loadingAgencies">
+      {{ submitting ? 'Sending...' : (failures.length > 0 ? 'Retry rejected' : 'Send Invites') }}
     </button>
   </mat-dialog-actions>
 </form>

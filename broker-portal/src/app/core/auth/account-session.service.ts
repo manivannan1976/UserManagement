@@ -4,12 +4,29 @@ import { BehaviorSubject, Observable, catchError, finalize, map, of, shareReplay
 import { environment } from '../../../environments/environment';
 import { CsrfTokenStore } from './csrf-token.store';
 
+export interface Workspace {
+  key: string;
+  label: string;
+  url: string | null;
+}
+
 export interface AuthenticatedUser {
   id: number;
   email: string;
   firstName: string;
   lastName: string;
   role: string;
+  agencyId: number | null;
+  agencyName: string | null;
+  workspace: Workspace;
+  jobTitle: string | null;
+}
+
+/** Roles that may administer users (requirements section 2). */
+export const ADMIN_ROLES = ['PORTAL_SUPER_ADMIN', 'BROKER_ADMIN'];
+
+export function canAdministerUsers(user: AuthenticatedUser | null): boolean {
+  return !!user && ADMIN_ROLES.includes(user.role);
 }
 
 @Injectable({ providedIn: 'root' })
@@ -22,6 +39,7 @@ export class AccountSessionService {
   readonly user$ = this.userSubject.asObservable();
   readonly isAuthenticated$ = this.user$.pipe(map(user => user !== null));
   readonly email$ = this.user$.pipe(map(user => user?.email ?? null));
+  readonly canAdminister$ = this.user$.pipe(map(user => canAdministerUsers(user)));
 
   checkSession(): Observable<AuthenticatedUser | null> {
     if (this.sessionRequest) {
@@ -47,6 +65,14 @@ export class AccountSessionService {
       `${environment.apiBaseUrl}/auth/login`,
       { email, password }
     ).pipe(tap(user => this.userSubject.next(user)));
+  }
+
+  updateProfile(profile: { firstName: string; lastName: string; jobTitle: string | null }): Observable<AuthenticatedUser> {
+    return this.fetchCsrfToken().pipe(
+      switchMap(() => this.http.put<AuthenticatedUser>(
+        `${environment.apiBaseUrl}/auth/profile`, profile)),
+      tap(user => this.userSubject.next(user))
+    );
   }
 
   logout(): Observable<void> {

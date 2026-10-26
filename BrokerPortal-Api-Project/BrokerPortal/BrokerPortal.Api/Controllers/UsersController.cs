@@ -1,28 +1,31 @@
 using System.Data.Common;
 using BrokerPortal.Application.Users;
+using BrokerPortal.Domain;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authorization;
-using System.Security.Claims;
 
 namespace BrokerPortal.Api.Controllers;
 
 [ApiController]
-[Route("api/users")]
+[Route("api")]
+[Authorize(Roles = $"{PortalRoles.SuperAdmin},{PortalRoles.BrokerAdmin}")]
 public sealed class UsersController(
     IUserService userService,
     IAccountService accountService,
     ILogger<UsersController> logger,
     IHostEnvironment environment) : ControllerBase
 {
-    [HttpGet]
-    [Authorize(Roles = "PORTAL_SUPER_ADMIN")]
+    private Actor CurrentActor => User.ToActor() ?? throw new ForbiddenOperationException("Not signed in.");
+
+    [HttpGet("users")]
     [ProducesResponseType(typeof(PagedResult<UserListItemDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<PagedResult<UserListItemDto>>> GetUsers(
         [FromQuery] string? search,
         [FromQuery] string? status,
         [FromQuery] string? role,
+        [FromQuery] int? agencyId,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 10,
         CancellationToken cancellationToken = default)
@@ -45,42 +48,101 @@ public sealed class UsersController(
         if (role?.Length > 50)
             return BadRequest(new { message = "Role must not exceed 50 characters." });
 
-        try
-        {
-            var result = await userService.GetUsersAsync(
-                search, status, role, page, pageSize, cancellationToken);
-            return Ok(result);
-        }
-        catch (DbException exception)
-        {
-            logger.LogError(exception, "The users query failed because the database is unavailable.");
-            return Problem(
-                title: "Users are temporarily unavailable.",
-                detail: "The database could not process the users request. Please try again later.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
+        return await Run<PagedResult<UserListItemDto>>(async () => Ok(await userService.GetUsersAsync(
+            CurrentActor, search, status, role, agencyId, page, pageSize, cancellationToken)),
+            "The users query failed because the database is unavailable.");
     }
 
-    [HttpPost("invite")]
-    [Authorize(Roles = "PORTAL_SUPER_ADMIN")]
+    [HttpGet("agencies")]
+    [ProducesResponseType(typeof(IReadOnlyList<AgencyDto>), StatusCodes.Status200OK)]
+    public Task<ActionResult<IReadOnlyList<AgencyDto>>> GetAgencies(
+        CancellationToken cancellationToken = default) =>
+        Run<IReadOnlyList<AgencyDto>>(async () => Ok(
+            await userService.GetAgenciesAsync(CurrentActor, cancellationToken)),
+            "The agencies query failed because the database is unavailable.");
+
+    [HttpPost("users/invite")]
     [ValidateAntiForgeryToken]
     [ProducesResponseType(typeof(InvitationCreatedDto), StatusCodes.Status201Created)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status409Conflict)]
-    [ProducesResponseType(StatusCodes.Status503ServiceUnavailable)]
-    public async Task<ActionResult<InvitationCreatedDto>> InviteUser(
+    public Task<ActionResult<InvitationCreatedDto>> InviteUser(
         [FromBody] InviteUserRequest request,
+        CancellationToken cancellationToken = default) =>
+        Run<InvitationCreatedDto>(async () =>
+        {
+            var created = await accountService.CreateInvitationAsync(
+                CurrentActor, request, environment.IsDevelopment(), cancellationToken);
+            return CreatedAtAction(nameof(GetUsers), new { page = 1, pageSize = 10 }, created);
+        }, "Database failure while inviting a portal user.");
+
+    /// <summary>Invites many users in one request. Each row succeeds or fails on its own.</summary>
+    [HttpPost("users/invite/bulk")]
+    [ValidateAntiForgeryToken]
+    [ProducesResponseType(typeof(IReadOnlyList<BulkInviteResultDto>), StatusCodes.Status200OK)]
+    public Task<ActionResult<IReadOnlyList<BulkInviteResultDto>>> InviteUsers(
+        [FromBody] BulkInviteRequest request,
+        CancellationToken cancellationToken = default) =>
+        Run<IReadOnlyList<BulkInviteResultDto>>(async () => Ok(
+            await accountService.CreateInvitationsAsync(
+                CurrentActor, request.Invitations, environment.IsDevelopment(), cancellationToken)),
+            "Database failure while bulk-inviting portal users.");
+
+    [HttpPost("users/{userId:int}/resend-invitation")]
+    [ValidateAntiForgeryToken]
+    [ProducesResponseType(typeof(InvitationCreatedDto), StatusCodes.Status200OK)]
+    public Task<ActionResult<InvitationCreatedDto>> ResendInvitation(
+        int userId,
+        CancellationToken cancellationToken = default) =>
+        Run<InvitationCreatedDto>(async () => Ok(
+            await accountService.ResendInvitationAsync(
+                CurrentActor, userId, environment.IsDevelopment(), cancellationToken)),
+            "Database failure while resending an invitation.");
+
+    /// <summary>Deactivation must be explicitly confirmed; it ends portal access immediately.</summary>
+    [HttpPost("users/{userId:int}/deactivate")]
+    [ValidateAntiForgeryToken]
+    [ProducesResponseType(typeof(UserListItemDto), StatusCodes.Status200OK)]
+    public Task<ActionResult<UserListItemDto>> Deactivate(
+        int userId,
+        [FromBody] DeactivateUserRequest request,
         CancellationToken cancellationToken = default)
+    {
+        if (!request.Confirm)
+        {
+            return Task.FromResult<ActionResult<UserListItemDto>>(BadRequest(
+                new { message = "Deactivation must be confirmed." }));
+        }
+
+        return Run<UserListItemDto>(async () => Ok(
+            await userService.DeactivateAsync(CurrentActor, userId, cancellationToken)),
+            "Database failure while deactivating a user.");
+    }
+
+    [HttpPost("users/{userId:int}/reactivate")]
+    [ValidateAntiForgeryToken]
+    [ProducesResponseType(typeof(UserListItemDto), StatusCodes.Status200OK)]
+    public Task<ActionResult<UserListItemDto>> Reactivate(
+        int userId,
+        CancellationToken cancellationToken = default) =>
+        Run<UserListItemDto>(async () => Ok(
+            await userService.ReactivateAsync(CurrentActor, userId, cancellationToken)),
+            "Database failure while reactivating a user.");
+
+    /// <summary>Maps domain exceptions to HTTP responses so every endpoint behaves consistently.</summary>
+    private async Task<ActionResult<T>> Run<T>(Func<Task<ActionResult<T>>> action, string failureLog)
     {
         try
         {
-            var created = await accountService.CreateInvitationAsync(
-                request, GetCurrentUserId(), environment.IsDevelopment(),
-                cancellationToken);
-            return CreatedAtAction(
-                nameof(GetUsers),
-                new { page = 1, pageSize = 10 },
-                created);
+            return await action();
+        }
+        catch (ForbiddenOperationException exception)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound(new { message = "User was not found." });
         }
         catch (DuplicateUserEmailException exception)
         {
@@ -91,66 +153,21 @@ public sealed class UsersController(
                 Status = StatusCodes.Status409Conflict
             });
         }
-        catch (DbUpdateException exception)
+        catch (BusinessRuleException exception)
         {
-            logger.LogError(exception, "Failed to save an invited portal user.");
-            return Problem(
-                title: "The invitation could not be saved.",
-                detail: "The user record could not be saved. Please try again later.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-        catch (DbException exception)
-        {
-            logger.LogError(exception, "Database failure while inviting a portal user.");
-            return Problem(
-                title: "The invitation could not be saved.",
-                detail: "The database is temporarily unavailable. Please try again later.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-    }
-
-    [HttpPost("{userId:int}/resend-invitation")]
-    [Authorize(Roles = "PORTAL_SUPER_ADMIN")]
-    [ValidateAntiForgeryToken]
-    [ProducesResponseType(typeof(InvitationCreatedDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<InvitationCreatedDto>> ResendInvitation(
-        int userId,
-        CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var result = await accountService.ResendInvitationAsync(
-                userId, GetCurrentUserId(),
-                environment.IsDevelopment(),
-                cancellationToken);
-            return Ok(result);
-        }
-        catch (KeyNotFoundException)
-        {
-            return NotFound(new { message = "User was not found." });
+            return BadRequest(new { message = exception.Message });
         }
         catch (InvalidOperationException exception)
         {
             return BadRequest(new { message = exception.Message });
         }
-        catch (DbUpdateException exception)
+        catch (Exception exception) when (exception is DbUpdateException or DbException)
         {
-            logger.LogError(exception, "Failed to create a replacement invitation.");
+            logger.LogError(exception, "{FailureLog}", failureLog);
             return Problem(
-                title: "The invitation could not be resent.",
-                statusCode: StatusCodes.Status503ServiceUnavailable);
-        }
-        catch (DbException exception)
-        {
-            logger.LogError(exception, "Database failure while resending an invitation.");
-            return Problem(
-                title: "The invitation could not be resent.",
+                title: "The request could not be completed.",
+                detail: "The database is temporarily unavailable. Please try again later.",
                 statusCode: StatusCodes.Status503ServiceUnavailable);
         }
     }
-
-    private int? GetCurrentUserId() =>
-        int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId)
-            ? userId
-            : null;
 }

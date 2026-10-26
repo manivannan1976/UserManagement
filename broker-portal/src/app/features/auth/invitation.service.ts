@@ -8,6 +8,8 @@ export interface InvitationValidation {
   isValid: boolean;
   email: string | null;
   state: string | null;
+  firstName: string | null;
+  lastName: string | null;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -21,10 +23,15 @@ export class InvitationService {
     });
   }
 
-  activate(token: string, password: string, confirmPassword: string): Observable<void> {
+  activate(
+    token: string, firstName: string, lastName: string,
+    password: string, confirmPassword: string
+  ): Observable<void> {
     return this.session.fetchCsrfToken().pipe(
       switchMap(() => this.http.post<void>(`${environment.apiBaseUrl}/invitations/activate`, {
         token,
+        firstName,
+        lastName,
         password,
         confirmPassword
       }))

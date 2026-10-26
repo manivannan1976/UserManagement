@@ -26,7 +26,8 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
         options.Cookie.Path = "/";
         options.Cookie.SameSite = SameSiteMode.None;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
-        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.ExpireTimeSpan = TimeSpan.FromMinutes(
+            builder.Configuration.GetValue("Session:IdleTimeoutMinutes", 480));
         options.SlidingExpiration = true;
         options.Events.OnRedirectToLogin = context =>
         {
@@ -53,12 +54,13 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             var dbContext = scope.ServiceProvider.GetRequiredService<BrokerPortalDbContext>();
             var account = await dbContext.Users.AsNoTracking()
                 .Where(user => user.Id == userId)
-                .Select(user => new { user.Status, user.Role })
+                .Select(user => new { user.Status, user.Role, user.AgencyId })
                 .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
 
             if (account is null ||
                 account.Status != "Active" ||
-                account.Role != principal!.FindFirstValue(ClaimTypes.Role))
+                account.Role != principal!.FindFirstValue(ClaimTypes.Role) ||
+                account.AgencyId?.ToString() != principal.FindFirstValue(ClaimsPrincipalExtensions.AgencyIdClaim))
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -79,6 +81,8 @@ builder.Services.Configure<InvitationEmailOptions>(
     builder.Configuration.GetSection("InvitationEmail"));
 builder.Services.Configure<ActivationPasswordOptions>(
     builder.Configuration.GetSection("ActivationPassword"));
+builder.Services.Configure<WorkspaceOptions>(
+    builder.Configuration.GetSection("Workspaces"));
 
 // Configure SQL Server.
 var connectionString =

@@ -2,6 +2,7 @@ using System.Data;
 using System.Security.Cryptography;
 using System.Text;
 using BrokerPortal.Application.Users;
+using BrokerPortal.Domain;
 using BrokerPortal.Domain.Entities;
 using BrokerPortal.Infrastructure.Data;
 using Microsoft.AspNetCore.Identity;
@@ -15,23 +16,19 @@ public sealed class AccountService(
     IPasswordHasher<PortalUser> passwordHasher,
     IInvitationEmailService emailService,
     IOptions<InvitationEmailOptions> emailOptions,
-    IOptions<ActivationPasswordOptions> passwordOptions) : IAccountService
+    IOptions<ActivationPasswordOptions> passwordOptions,
+    IOptions<WorkspaceOptions> workspaceOptions) : IAccountService
 {
-    private static readonly HashSet<string> AllowedInviteRoles =
-        ["BROKER_ADMIN", "BROKER_USER"];
-
     private readonly InvitationEmailOptions settings = emailOptions.Value;
     private readonly ActivationPasswordOptions passwordPolicy = passwordOptions.Value;
+    private readonly WorkspaceOptions workspaces = workspaceOptions.Value;
 
     public async Task<InvitationCreatedDto> CreateInvitationAsync(
-        InviteUserRequest request, int? invitedByUserId, bool includePreviewLink,
+        Actor actor, InviteUserRequest request, bool includePreviewLink,
         CancellationToken cancellationToken)
     {
         var email = NormalizeEmail(request.Email);
-        if (!AllowedInviteRoles.Contains(request.Role))
-        {
-            throw new ArgumentException("Only broker roles can be invited.", nameof(request));
-        }
+        var agency = await ResolveInviteAgencyAsync(actor, request, email, cancellationToken);
 
         if (await dbContext.Users.AnyAsync(
                 user => user.Email.ToLower() == email, cancellationToken))
@@ -41,31 +38,63 @@ public sealed class AccountService(
 
         var user = new PortalUser
         {
-            FirstName = request.FirstName.Trim(),
-            LastName = request.LastName.Trim(),
+            FirstName = request.FirstName?.Trim() ?? string.Empty,
+            LastName = request.LastName?.Trim() ?? string.Empty,
             Email = email,
             JobTitle = string.IsNullOrWhiteSpace(request.JobTitle) ? null : request.JobTitle.Trim(),
             Role = request.Role,
-            Status = "Invited",
-            CreatedAt = DateTime.UtcNow
+            Status = UserStatuses.Invited,
+            CreatedAt = DateTime.UtcNow,
+            Agency = agency
         };
 
         dbContext.Users.Add(user);
-        var created = await AddInvitationAsync(user, invitedByUserId, includePreviewLink, cancellationToken);
-        return created;
+        return await AddInvitationAsync(user, actor.Id, includePreviewLink, cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<BulkInviteResultDto>> CreateInvitationsAsync(
+        Actor actor, IReadOnlyList<InviteUserRequest> requests, bool includePreviewLink,
+        CancellationToken cancellationToken)
+    {
+        var results = new List<BulkInviteResultDto>(requests.Count);
+        foreach (var request in requests)
+        {
+            try
+            {
+                var created = await CreateInvitationAsync(
+                    actor, request, includePreviewLink, cancellationToken);
+                results.Add(new BulkInviteResultDto(request.Email, true, null, created));
+            }
+            catch (DuplicateUserEmailException exception)
+            {
+                dbContext.ChangeTracker.Clear();
+                results.Add(new BulkInviteResultDto(request.Email, false, exception.Message, null));
+            }
+            catch (BusinessRuleException exception)
+            {
+                dbContext.ChangeTracker.Clear();
+                results.Add(new BulkInviteResultDto(request.Email, false, exception.Message, null));
+            }
+        }
+
+        return results;
     }
 
     public async Task<InvitationCreatedDto> ResendInvitationAsync(
-        int userId, int? invitedByUserId, bool includePreviewLink,
+        Actor actor, int userId, bool includePreviewLink,
         CancellationToken cancellationToken)
     {
-        var user = await dbContext.Users
+        var user = await ActorScope.Apply(
+                dbContext.Users.Include(candidate => candidate.Agency), actor)
             .SingleOrDefaultAsync(candidate => candidate.Id == userId, cancellationToken)
             ?? throw new KeyNotFoundException("User was not found.");
+        ActorScope.EnsureCanManage(actor, user);
 
-        if (user.Status != "Invited")
+        // Expired invitations can be resent without re-entering the user's data.
+        if (user.Status != UserStatuses.Invited && user.Status != UserStatuses.Expired)
         {
-            throw new InvalidOperationException("Only invited users can receive a new invitation.");
+            throw new InvalidOperationException(
+                "Only invited or expired users can receive a new invitation.");
         }
 
         var now = DateTime.UtcNow;
@@ -78,7 +107,9 @@ public sealed class AccountService(
             invitation.RevokedAtUtc = now;
         }
 
-        return await AddInvitationAsync(user, invitedByUserId, includePreviewLink, cancellationToken);
+        user.Status = UserStatuses.Invited;
+        user.UpdatedAt = now;
+        return await AddInvitationAsync(user, actor.Id, includePreviewLink, cancellationToken);
     }
 
     public async Task<InvitationValidationDto> ValidateInvitationAsync(
@@ -127,8 +158,10 @@ public sealed class AccountService(
         }
 
         var now = DateTime.UtcNow;
+        invitation.User.FirstName = request.FirstName.Trim();
+        invitation.User.LastName = request.LastName.Trim();
         invitation.User.PasswordHash = passwordHasher.HashPassword(invitation.User, request.Password);
-        invitation.User.Status = "Active";
+        invitation.User.Status = UserStatuses.Active;
         invitation.User.EmailVerifiedAtUtc = now;
         invitation.User.ActivatedAtUtc = now;
         invitation.User.UpdatedAt = now;
@@ -150,10 +183,10 @@ public sealed class AccountService(
         LoginRequest request, CancellationToken cancellationToken)
     {
         var email = NormalizeEmail(request.Email);
-        var user = await dbContext.Users.SingleOrDefaultAsync(
-            candidate => candidate.Email.ToLower() == email, cancellationToken);
+        var user = await dbContext.Users.Include(candidate => candidate.Agency)
+            .SingleOrDefaultAsync(candidate => candidate.Email.ToLower() == email, cancellationToken);
 
-        if (user is null || user.Status != "Active" || string.IsNullOrEmpty(user.PasswordHash))
+        if (user is null || user.Status != UserStatuses.Active || string.IsNullOrEmpty(user.PasswordHash))
         {
             throw new InvalidCredentialsException();
         }
@@ -170,7 +203,91 @@ public sealed class AccountService(
             await dbContext.SaveChangesAsync(cancellationToken);
         }
 
-        return new AuthenticatedUserDto(user.Id, user.Email, user.FirstName, user.LastName, user.Role);
+        return AccountMapper.ToAuthenticated(user, workspaces);
+    }
+
+    public async Task<AuthenticatedUserDto> GetSessionUserAsync(
+        int userId, CancellationToken cancellationToken)
+    {
+        var user = await dbContext.Users.AsNoTracking()
+            .Include(candidate => candidate.Agency)
+            .SingleOrDefaultAsync(candidate => candidate.Id == userId, cancellationToken)
+            ?? throw new KeyNotFoundException("User was not found.");
+        return AccountMapper.ToAuthenticated(user, workspaces);
+    }
+
+    /// <summary>
+    /// Applies the delegated-administration rules from the requirements: who may invite which role,
+    /// agency inheritance, accepted email domains and the per-agency user limit.
+    /// </summary>
+    private async Task<Agency?> ResolveInviteAgencyAsync(
+        Actor actor, InviteUserRequest request, string email, CancellationToken cancellationToken)
+    {
+        var role = request.Role;
+        int? agencyId;
+        switch (actor.Role)
+        {
+            case PortalRoles.SuperAdmin:
+                if (PortalRoles.IsInternal(role))
+                {
+                    return null; // Internal roles are never tied to a broker agency.
+                }
+
+                if (!PortalRoles.IsBroker(role))
+                {
+                    throw new BusinessRuleException("This role cannot be invited.");
+                }
+
+                agencyId = request.AgencyId
+                    ?? throw new BusinessRuleException("Select the agency for this broker user.");
+                break;
+
+            case PortalRoles.BrokerAdmin:
+                if (role != PortalRoles.BrokerUser)
+                {
+                    throw new ForbiddenOperationException(
+                        "Broker admins can only invite Broker users.");
+                }
+
+                // The agency is always inherited; anything in the request is ignored.
+                agencyId = actor.AgencyId
+                    ?? throw new ForbiddenOperationException("Your account is not linked to an agency.");
+                break;
+
+            default:
+                throw new ForbiddenOperationException("You are not allowed to invite users.");
+        }
+
+        var agency = await dbContext.Agencies
+            .SingleOrDefaultAsync(candidate => candidate.Id == agencyId, cancellationToken)
+            ?? throw new BusinessRuleException("The selected agency was not found.");
+        if (!agency.IsActive)
+        {
+            throw new BusinessRuleException($"{agency.Name} is not active.");
+        }
+
+        var domains = agency.GetDomains();
+        var emailDomain = email[(email.LastIndexOf('@') + 1)..];
+        if (domains.Count > 0 && !domains.Contains(emailDomain))
+        {
+            throw new BusinessRuleException(
+                $"{email} is not on an accepted domain for {agency.Name} ({string.Join(", ", domains.Select(domain => "@" + domain))}).");
+        }
+
+        if (agency.MaxActiveUsers is { } limit)
+        {
+            var seats = await dbContext.Users.CountAsync(user =>
+                user.AgencyId == agency.Id &&
+                (user.Status == UserStatuses.Active || user.Status == UserStatuses.Invited),
+                cancellationToken);
+            if (seats >= limit)
+            {
+                throw new BusinessRuleException(
+                    $"{agency.Name} has reached its limit of {limit} active users.");
+            }
+        }
+
+        return agency;
     }
 
     private async Task<InvitationCreatedDto> AddInvitationAsync(
@@ -200,12 +317,13 @@ public sealed class AccountService(
         }
 
         var activationUrl = BuildActivationUrl(token);
+        var greetingName = string.IsNullOrWhiteSpace(user.FirstName) ? "there" : user.FirstName;
         var delivery = await emailService.SendAsync(
-            new InvitationEmail(user.Email, user.FirstName, activationUrl, expires),
+            new InvitationEmail(user.Email, greetingName, activationUrl, expires),
             cancellationToken);
 
         return new InvitationCreatedDto(
-            ToDto(user),
+            UserService.ToDto(user),
             delivery.Status,
             delivery.Message,
             includePreviewLink && delivery.Status == "Preview" ? activationUrl : null,
@@ -250,15 +368,13 @@ public sealed class AccountService(
             return new InvitationValidationDto(false, null, "revoked");
         if (invitation.ExpiresAtUtc <= now)
             return new InvitationValidationDto(false, null, "expired");
-        if (invitation.User.Status != "Invited")
+        if (invitation.User.Status != UserStatuses.Invited)
             return new InvitationValidationDto(false, null, "unavailable");
 
-        return new InvitationValidationDto(true, invitation.User.Email, null);
+        return new InvitationValidationDto(
+            true, invitation.User.Email, null,
+            invitation.User.FirstName, invitation.User.LastName);
     }
-
-    private static UserListItemDto ToDto(PortalUser user) =>
-        new(user.Id, user.FirstName, user.LastName, user.Email, user.JobTitle,
-            user.Role, user.Status, user.CreatedAt);
 
     private static bool IsUniqueConstraintViolation(DbUpdateException exception)
     {

@@ -12,6 +12,7 @@ namespace BrokerPortal.Api.Controllers;
 [Route("api/auth")]
 public sealed class AuthController(
     IAccountService accountService,
+    IUserService userService,
     IAntiforgery antiforgery) : ControllerBase
 {
     [HttpGet("csrf")]
@@ -32,15 +33,20 @@ public sealed class AuthController(
         try
         {
             var user = await accountService.LoginAsync(request, cancellationToken);
-            var claims = new[]
+            var claims = new List<Claim>
             {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Email, user.Email),
-                new Claim(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
-                new Claim(ClaimTypes.GivenName, user.FirstName),
-                new Claim(ClaimTypes.Surname, user.LastName),
-                new Claim(ClaimTypes.Role, user.Role)
+                new(ClaimTypes.NameIdentifier, user.Id.ToString()),
+                new(ClaimTypes.Email, user.Email),
+                new(ClaimTypes.Name, $"{user.FirstName} {user.LastName}"),
+                new(ClaimTypes.GivenName, user.FirstName),
+                new(ClaimTypes.Surname, user.LastName),
+                new(ClaimTypes.Role, user.Role)
             };
+            if (user.AgencyId is { } agencyId)
+            {
+                claims.Add(new Claim(ClaimsPrincipalExtensions.AgencyIdClaim, agencyId.ToString()));
+            }
+
             var identity = new ClaimsIdentity(
                 claims, CookieAuthenticationDefaults.AuthenticationScheme);
 
@@ -57,19 +63,49 @@ public sealed class AuthController(
 
     [HttpGet("session")]
     [Authorize]
-    public ActionResult<AuthenticatedUserDto> Session()
+    public async Task<ActionResult<AuthenticatedUserDto>> Session(
+        CancellationToken cancellationToken)
     {
-        if (!int.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id))
+        if (User.ToActor() is not { } actor)
         {
             return Unauthorized();
         }
 
-        return Ok(new AuthenticatedUserDto(
-            id,
-            User.FindFirstValue(ClaimTypes.Email) ?? string.Empty,
-            User.FindFirstValue(ClaimTypes.GivenName) ?? string.Empty,
-            User.FindFirstValue(ClaimTypes.Surname) ?? string.Empty,
-            User.FindFirstValue(ClaimTypes.Role) ?? string.Empty));
+        try
+        {
+            return Ok(await accountService.GetSessionUserAsync(actor.Id, cancellationToken));
+        }
+        catch (KeyNotFoundException)
+        {
+            return Unauthorized();
+        }
+    }
+
+    /// <summary>Lets a signed-in user edit their own name and job title. Email and role are never editable.</summary>
+    [HttpPut("profile")]
+    [Authorize]
+    [ValidateAntiForgeryToken]
+    public async Task<ActionResult<AuthenticatedUserDto>> UpdateProfile(
+        [FromBody] UpdateProfileRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (User.ToActor() is not { } actor)
+        {
+            return Unauthorized();
+        }
+
+        try
+        {
+            return Ok(await userService.UpdateProfileAsync(actor.Id, request, cancellationToken));
+        }
+        catch (BusinessRuleException exception)
+        {
+            return BadRequest(new { message = exception.Message });
+        }
+        catch (KeyNotFoundException)
+        {
+            return Unauthorized();
+        }
     }
 
     [HttpPost("logout")]

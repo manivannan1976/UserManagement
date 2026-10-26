@@ -14,6 +14,9 @@ public sealed class PortalUser
     public DateTime? UpdatedAt { get; set; }
     public DateTime? EmailVerifiedAtUtc { get; set; }
     public DateTime? ActivatedAtUtc { get; set; }
+    public DateTime? DeactivatedAtUtc { get; set; }
+    public int? AgencyId { get; set; }
+    public Agency? Agency { get; set; }
     public byte[] RowVersion { get; set; } = [];
     public ICollection<UserInvitation> Invitations { get; set; } = [];
 }

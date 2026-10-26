@@ -3,7 +3,11 @@ namespace BrokerPortal.Application.Users;
 public interface IAccountService
 {
     Task<InvitationCreatedDto> CreateInvitationAsync(
-        InviteUserRequest request, int? invitedByUserId, bool includePreviewLink,
+        Actor actor, InviteUserRequest request, bool includePreviewLink,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<BulkInviteResultDto>> CreateInvitationsAsync(
+        Actor actor, IReadOnlyList<InviteUserRequest> requests, bool includePreviewLink,
         CancellationToken cancellationToken);
 
     Task<InvitationValidationDto> ValidateInvitationAsync(
@@ -13,9 +17,12 @@ public interface IAccountService
         ActivateInvitationRequest request, CancellationToken cancellationToken);
 
     Task<InvitationCreatedDto> ResendInvitationAsync(
-        int userId, int? invitedByUserId, bool includePreviewLink,
+        Actor actor, int userId, bool includePreviewLink,
         CancellationToken cancellationToken);
 
     Task<AuthenticatedUserDto> LoginAsync(
         LoginRequest request, CancellationToken cancellationToken);
+
+    Task<AuthenticatedUserDto> GetSessionUserAsync(
+        int userId, CancellationToken cancellationToken);
 }

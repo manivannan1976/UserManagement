@@ -8,6 +8,7 @@ public sealed class BrokerPortalDbContext(
 {
     public DbSet<PortalUser> Users => Set<PortalUser>();
     public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
+    public DbSet<Agency> Agencies => Set<Agency>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -28,6 +29,19 @@ public sealed class BrokerPortalDbContext(
         user.Property(x => x.PasswordHash).HasMaxLength(512);
         user.Property(x => x.EmailVerifiedAtUtc).HasColumnName("EmailVerifiedAt");
         user.Property(x => x.ActivatedAtUtc).HasColumnName("ActivatedAt");
+        user.Property(x => x.DeactivatedAtUtc).HasColumnName("DeactivatedAt");
+        user.HasOne(x => x.Agency).WithMany().HasForeignKey(x => x.AgencyId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        var agency = modelBuilder.Entity<Agency>();
+        agency.ToTable("Agencies");
+        agency.HasKey(x => x.Id);
+        agency.Property(x => x.Id).HasColumnName("AgencyId").UseIdentityColumn();
+        agency.Property(x => x.Name).HasMaxLength(200).IsRequired();
+        agency.HasIndex(x => x.Name).IsUnique();
+        agency.Property(x => x.DuckCreekAgencyId).HasMaxLength(100);
+        agency.Property(x => x.AcceptedDomains).HasMaxLength(1000).IsRequired();
+        agency.Property(x => x.Products).HasMaxLength(1000).IsRequired();
 
         var invitation = modelBuilder.Entity<UserInvitation>();
         invitation.ToTable("UserInvitations");

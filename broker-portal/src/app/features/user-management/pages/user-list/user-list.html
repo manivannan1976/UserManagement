@@ -8,7 +8,7 @@
       <h1>User Management</h1>
 
       <p class="page-description">
-        Manage broker users and portal access.
+        {{ isSuperAdmin ? 'Manage broker and internal users across all agencies.' : 'Invite and manage users for ' + (agencyName ?? 'your agency') + '.' }}
       </p>
     </div>
 
@@ -19,7 +19,7 @@
       (click)="onInviteUser()"
     >
       <mat-icon>person_add</mat-icon>
-      Invite User
+      Invite Users
     </button>
   </header>
 
@@ -80,7 +80,7 @@
         <h2>All Users</h2>
 
         <p>
-          View and manage users across broker agencies.
+          {{ isSuperAdmin ? 'View and manage users across broker agencies.' : 'Only users in your agency are shown.' }}
         </p>
       </div>
 
@@ -163,6 +163,18 @@
         </mat-select>
       </mat-form-field>
 
+      @if (isSuperAdmin) {
+        <mat-form-field appearance="outline" class="status-field" subscriptSizing="dynamic">
+          <mat-label>Filter by agency</mat-label>
+          <mat-select [(ngModel)]="selectedAgencyId" (ngModelChange)="onFiltersChanged()">
+            <mat-option [value]="null">All agencies</mat-option>
+            @for (agency of agencies; track agency.id) {
+              <mat-option [value]="agency.id">{{ agency.name }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      }
+
       <button
         mat-button
         type="button"
@@ -222,6 +234,9 @@
           <tr>
             <th scope="col">USER</th>
             <th scope="col">ROLE</th>
+            @if (isSuperAdmin) {
+              <th scope="col">AGENCY</th>
+            }
             <th scope="col">JOB TITLE</th>
             <th scope="col">STATUS</th>
             <th scope="col">CREATED</th>
@@ -237,12 +252,12 @@
               <div class="user-cell">
 
                 <div class="avatar">
-                  {{ user.firstName.charAt(0) }}{{ user.lastName.charAt(0) }}
+                  {{ initials(user) }}
                 </div>
 
                 <div class="user-info">
                   <span class="user-name">
-                    {{ user.firstName }} {{ user.lastName }}
+                    {{ displayName(user) }}
                   </span>
 
                   <span class="user-email">
@@ -259,9 +274,15 @@
 
             <td>
               <span class="role-label">
-                {{ user.role }}
+                {{ roleLabels[user.role] || user.role }}
               </span>
             </td>
+
+            @if (isSuperAdmin) {
+              <td>
+                <span class="agency-name">{{ user.agencyName || 'BHSI (internal)' }}</span>
+              </td>
+            }
 
             <td>
               <span class="agency-name">
@@ -306,6 +327,25 @@
               >
                 Resend
               </button>
+              <button
+                *ngIf="canDeactivate(user)"
+                mat-button
+                type="button"
+                class="deactivate-button"
+                title="Deactivate user"
+                (click)="deactivate(user)"
+              >
+                Deactivate
+              </button>
+              <button
+                *ngIf="canReactivate(user)"
+                mat-button
+                type="button"
+                title="Reactivate user"
+                (click)="reactivate(user)"
+              >
+                Reactivate
+              </button>
             </td>
 
           </tr>
@@ -313,7 +353,7 @@
           <!-- Empty state -->
           <tr *ngIf="!loading && !error && filteredUsers.length === 0">
 
-            <td colspan="6">
+            <td [attr.colspan]="isSuperAdmin ? 7 : 6">
               <div class="empty-state">
 
                 <mat-icon>person_search</mat-icon>

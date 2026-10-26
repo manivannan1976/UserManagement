@@ -10,14 +10,22 @@ public sealed record InvitationCreatedDto(
 public sealed record InvitationValidationDto(
     bool IsValid,
     string? Email,
-    string? State);
+    string? State,
+    string? FirstName = null,
+    string? LastName = null);
+
+public sealed record WorkspaceDto(string Key, string Label, string? Url);
 
 public sealed record AuthenticatedUserDto(
     int Id,
     string Email,
     string FirstName,
     string LastName,
-    string Role);
+    string Role,
+    int? AgencyId,
+    string? AgencyName,
+    WorkspaceDto Workspace,
+    string? JobTitle = null);
 
 public sealed record InvitationEmail(
     string Recipient,
@@ -29,3 +37,21 @@ public sealed record InvitationDeliveryResult(
     string Status,
     string? Message,
     string? PreviewHtml = null);
+
+public sealed record AgencyDto(
+    int Id,
+    string Name,
+    string? DuckCreekAgencyId,
+    IReadOnlyList<string> AcceptedDomains,
+    IReadOnlyList<string> Products,
+    int? MaxActiveUsers,
+    int SeatsUsed);
+
+public sealed record BulkInviteResultDto(
+    string Email,
+    bool Succeeded,
+    string? Error,
+    InvitationCreatedDto? Invitation);
+
+/// <summary>The authenticated caller, derived from the session cookie.</summary>
+public sealed record Actor(int Id, string Role, int? AgencyId);

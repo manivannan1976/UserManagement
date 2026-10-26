@@ -31,6 +31,8 @@ export class ActivateInvitationPage implements OnInit {
   private readonly formBuilder = inject(FormBuilder);
 
   readonly form = this.formBuilder.nonNullable.group({
+    firstName: ['', [Validators.required, Validators.maxLength(100)]],
+    lastName: ['', [Validators.required, Validators.maxLength(100)]],
     password: ['', [
       Validators.required,
       Validators.minLength(12),
@@ -83,6 +85,10 @@ export class ActivateInvitationPage implements OnInit {
           this.loading = false;
           this.state = result.isValid ? 'valid' : result.state ?? 'invalid';
           this.email = result.email;
+          this.form.patchValue({
+            firstName: result.firstName ?? '',
+            lastName: result.lastName ?? ''
+          });
           if (!result.isValid) {
             this.token = null;
           }
@@ -105,8 +111,8 @@ export class ActivateInvitationPage implements OnInit {
     this.submitting = true;
     this.errorMessage = '';
     const token = this.token;
-    const { password, confirmPassword } = this.form.getRawValue();
-    this.service.activate(token, password, confirmPassword).pipe(
+    const { firstName, lastName, password, confirmPassword } = this.form.getRawValue();
+    this.service.activate(token, firstName.trim(), lastName.trim(), password, confirmPassword).pipe(
       takeUntilDestroyed(this.destroyRef)
     ).subscribe({
       next: () => {

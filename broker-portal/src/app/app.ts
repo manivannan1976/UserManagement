@@ -16,6 +16,7 @@ export class App {
   private readonly router = inject(Router);
   readonly isAuthenticated$ = this.auth.isAuthenticated$;
   readonly email$ = this.auth.email$;
+  readonly canAdminister$ = this.auth.canAdminister$;
   logoutError = '';
 
   logout(): void {

@@ -2,7 +2,8 @@ import { Routes } from '@angular/router';
 import {
   sessionAuthGuard,
   sessionLoginGuard,
-  sessionRootGuard
+  sessionRootGuard,
+  userAdminGuard
 } from './core/auth/demo-auth.guard';
 
 export const routes: Routes = [
@@ -20,11 +21,17 @@ export const routes: Routes = [
   },
   {
     path: 'users',
-    canActivate: [sessionAuthGuard],
+    canActivate: [userAdminGuard],
     loadComponent: () =>
       import(
         './features/user-management/pages/user-list/user-list'
       ).then(component => component.UserListComponent)
+  },
+  {
+    path: 'profile',
+    canActivate: [sessionAuthGuard],
+    loadComponent: () =>
+      import('./features/auth/pages/profile/profile').then(component => component.ProfilePage)
   },
   {
     path: 'unauthorized',

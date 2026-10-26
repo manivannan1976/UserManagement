@@ -3,7 +3,7 @@ namespace BrokerPortal.Infrastructure.Services;
 public sealed class InvitationEmailOptions
 {
     public string FrontendBaseUrl { get; set; } = "http://localhost:4200";
-    public int LifetimeHours { get; set; } = 48;
+    public int LifetimeHours { get; set; } = 168;
     public string SmtpHost { get; set; } = string.Empty;
     public int SmtpPort { get; set; } = 587;
     public bool EnableSsl { get; set; } = true;
