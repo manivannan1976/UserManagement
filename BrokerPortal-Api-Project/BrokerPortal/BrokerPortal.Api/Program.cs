@@ -1,7 +1,9 @@
+using BrokerPortal.Application.DuckCreek;
 using BrokerPortal.Application.Users;
 using BrokerPortal.Api;
 using BrokerPortal.Domain.Entities;
 using BrokerPortal.Infrastructure.Data;
+using BrokerPortal.Infrastructure.DuckCreek;
 using BrokerPortal.Infrastructure.Services;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
@@ -60,7 +62,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
             if (account is null ||
                 account.Status != "Active" ||
                 account.Role != principal!.FindFirstValue(ClaimTypes.Role) ||
-                account.AgencyId?.ToString() != principal.FindFirstValue(ClaimsPrincipalExtensions.AgencyIdClaim))
+                account.AgencyId?.ToString() != principal!.FindFirstValue(ClaimsPrincipalExtensions.AgencyIdClaim))
             {
                 context.RejectPrincipal();
                 await context.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -83,6 +85,8 @@ builder.Services.Configure<ActivationPasswordOptions>(
     builder.Configuration.GetSection("ActivationPassword"));
 builder.Services.Configure<WorkspaceOptions>(
     builder.Configuration.GetSection("Workspaces"));
+builder.Services.Configure<DuckCreekOptions>(
+    builder.Configuration.GetSection("DuckCreek"));
 
 // Configure SQL Server.
 var connectionString =
@@ -96,6 +100,19 @@ builder.Services.AddDbContext<BrokerPortalDbContext>(options =>
 // Register application services.
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<IPasswordHasher<DuckCreekUser>, PasswordHasher<DuckCreekUser>>();
+
+// Duck Creek User Admin: "Local" stores users in the portal database until a Duck Creek
+// environment is available; "Http" calls the real API. Switch with DuckCreek:Mode.
+if (string.Equals(builder.Configuration["DuckCreek:Mode"], DuckCreekOptions.ModeHttp,
+        StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<IDuckCreekUserAdminClient, HttpDuckCreekUserAdminClient>();
+}
+else
+{
+    builder.Services.AddScoped<IDuckCreekUserAdminClient, LocalDuckCreekUserAdminClient>();
+}
 builder.Services.AddScoped<DevelopmentOnlyAntiforgeryFilter>();
 builder.Services.AddScoped<IPasswordHasher<PortalUser>, PasswordHasher<PortalUser>>();
 builder.Services.AddSingleton<IInvitationEmailService, InvitationEmailService>();

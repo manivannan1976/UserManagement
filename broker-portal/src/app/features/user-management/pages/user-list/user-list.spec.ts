@@ -81,6 +81,7 @@ describe('UserListComponent', () => {
   it('allows resending to invited and expired users only', () => {
     expect(component.isInvitationPending(buildUser({ status: 'Invited' }))).toBeTrue();
     expect(component.isInvitationPending(buildUser({ status: 'Expired' }))).toBeTrue();
+    expect(component.isInvitationPending(buildUser({ status: 'Setup Incomplete' }))).toBeTrue();
     expect(component.isInvitationPending(buildUser({ status: 'Active' }))).toBeFalse();
     expect(component.isInvitationPending(buildUser({ status: 'Deactivated' }))).toBeFalse();
   });

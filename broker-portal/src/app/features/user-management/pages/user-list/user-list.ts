@@ -167,10 +167,10 @@ export class UserListComponent implements OnInit {
     return statusClasses[status];
   }
 
-  /** Pending and expired invitations can be resent without re-entering the user's data. */
+  /** Pending, expired and setup-incomplete (Duck Creek provisioning failed) invitations can be resent without re-entering the user's data. */
   isInvitationPending(user: PortalUser): boolean {
     const status = user.status.trim().toLowerCase();
-    return status === 'invited' || status === 'expired';
+    return status === 'invited' || status === 'expired' || status === 'setup incomplete';
   }
 
   canDeactivate(user: PortalUser): boolean {

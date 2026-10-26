@@ -52,3 +52,20 @@ Apply the SQL scripts in `BrokerPortal.Api/Database/Migrations` in order. `20261
 | Q4 | `Session:IdleTimeoutMinutes` (default 480). |
 
 Not implemented because they need external systems: Auth0 SSO sign-in (users currently set a local password on activation), creating and deactivating users in Auth0 and Duck Creek, the "Setup incomplete" transition from a failed Duck Creek setup, and two-way sync of internal users with S|2 (Q7).
+
+## Duck Creek User Admin
+
+Every portal user (broker admin, broker user, underwriter) is also created in Duck Creek User Admin when the invitation is created. `IDuckCreekUserAdminClient` has two implementations, selected by `DuckCreek:Mode`:
+
+| Mode | Behaviour |
+| --- | --- |
+| `Local` (default) | Stores the user in the `DuckCreekUsers` table of the portal database. Behaves like the real API, including `FailIfExists`. `GET /api/duckcreek/users` (super admin) lists them; password hashes are never returned. |
+| `Http` | Calls `POST {BaseUrl}/ServerPolicy/api/v1/users?UserName=&FullName=&Password=&FailIfExists=&entityId=` with Basic auth. Untested until a Duck Creek environment is available. |
+
+To switch: set `DuckCreek:Mode` to `Http` and provide `DuckCreek:BaseUrl`, `DuckCreek:Username` and `DuckCreek:Password` through User Secrets or environment variables. Never put the Duck Creek credentials in `appsettings.json` or commit them.
+
+- The Duck Creek entity comes from `Agencies.DuckCreekEntityId` (Amwins US is 10021; the other sample ids are placeholders). Internal users use `DuckCreek:InternalEntityId`.
+- The Duck Creek user name is the portal email. The Duck Creek password is random and never stored by the portal, because users sign in through the portal.
+- If provisioning fails (including an agency with no entity id) the portal user is saved as **Setup Incomplete**, no invitation is emailed, and **Resend** retries. The call uses `FailIfExists=false`, so retries are safe.
+- Not yet synced to Duck Creek: name changes after activation, deactivation and reactivation. The Duck Creek collection only covers user creation.
+- Apply `Database/Migrations/20261026_DuckCreekUserAdminLocal.sql`.

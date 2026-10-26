@@ -6,6 +6,9 @@ public sealed class Agency
     public string Name { get; set; } = string.Empty;
     public string? DuckCreekAgencyId { get; set; }
 
+    /// <summary>Duck Creek entity that users of this agency are created under (e.g. 10021 for Amwins US).</summary>
+    public int? DuckCreekEntityId { get; set; }
+
     /// <summary>Comma-separated accepted email domains, e.g. "brokeragency.com,brokeragency.co.uk".</summary>
     public string AcceptedDomains { get; set; } = string.Empty;
 

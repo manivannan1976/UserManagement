@@ -136,9 +136,11 @@ export class InviteUserDialog implements OnInit {
         finalize(() => this.submitting = false)
       ).subscribe({
         next: response => this.dialogRef.close({
-          message: response.deliveryStatus === 'Sent'
-            ? `${response.user.email} was invited.`
-            : `${response.user.email} was saved as Invited. ${response.message ?? 'Email delivery did not complete.'}`,
+          message: response.user.status === 'Setup Incomplete'
+            ? `${response.user.email} was created. ${response.message ?? 'Duck Creek setup failed.'}`
+            : response.deliveryStatus === 'Sent'
+              ? `${response.user.email} was invited.`
+              : `${response.user.email} was saved as Invited. ${response.message ?? 'Email delivery did not complete.'}`,
           activationUrl: response.developmentActivationUrl,
           emailPreviewHtml: response.developmentEmailPreviewHtml
         } satisfies InviteDialogResult),

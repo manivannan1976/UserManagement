@@ -1,10 +1,12 @@
 using System.Data;
 using System.Security.Cryptography;
 using System.Text;
+using BrokerPortal.Application.DuckCreek;
 using BrokerPortal.Application.Users;
 using BrokerPortal.Domain;
 using BrokerPortal.Domain.Entities;
 using BrokerPortal.Infrastructure.Data;
+using BrokerPortal.Infrastructure.DuckCreek;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -17,8 +19,11 @@ public sealed class AccountService(
     IInvitationEmailService emailService,
     IOptions<InvitationEmailOptions> emailOptions,
     IOptions<ActivationPasswordOptions> passwordOptions,
-    IOptions<WorkspaceOptions> workspaceOptions) : IAccountService
+    IOptions<WorkspaceOptions> workspaceOptions,
+    IDuckCreekUserAdminClient duckCreek,
+    IOptions<DuckCreekOptions> duckCreekOptions) : IAccountService
 {
+    private readonly DuckCreekOptions duckCreekSettings = duckCreekOptions.Value;
     private readonly InvitationEmailOptions settings = emailOptions.Value;
     private readonly ActivationPasswordOptions passwordPolicy = passwordOptions.Value;
     private readonly WorkspaceOptions workspaces = workspaceOptions.Value;
@@ -91,10 +96,11 @@ public sealed class AccountService(
         ActorScope.EnsureCanManage(actor, user);
 
         // Expired invitations can be resent without re-entering the user's data.
-        if (user.Status != UserStatuses.Invited && user.Status != UserStatuses.Expired)
+        if (user.Status != UserStatuses.Invited && user.Status != UserStatuses.Expired &&
+            user.Status != UserStatuses.SetupIncomplete)
         {
             throw new InvalidOperationException(
-                "Only invited or expired users can receive a new invitation.");
+                "Only invited, expired or setup-incomplete users can receive a new invitation.");
         }
 
         var now = DateTime.UtcNow;
@@ -316,6 +322,24 @@ public sealed class AccountService(
             throw new DuplicateUserEmailException();
         }
 
+        // Every portal user also gets a Duck Creek User Admin account. If that fails the user is left
+        // as Setup Incomplete, no invitation is emailed, and a resend retries the provisioning.
+        if (user.DuckCreekUserName is null)
+        {
+            var failure = await ProvisionDuckCreekUserAsync(user, cancellationToken);
+            if (failure is not null)
+            {
+                user.Status = UserStatuses.SetupIncomplete;
+                user.UpdatedAt = DateTime.UtcNow;
+                invitation.RevokedAtUtc = DateTime.UtcNow;
+                await dbContext.SaveChangesAsync(cancellationToken);
+                return new InvitationCreatedDto(
+                    UserService.ToDto(user), "Failed",
+                    $"The user was saved but Duck Creek setup failed: {failure} Use Resend to retry.",
+                    null, null);
+            }
+        }
+
         var activationUrl = BuildActivationUrl(token);
         var greetingName = string.IsNullOrWhiteSpace(user.FirstName) ? "there" : user.FirstName;
         var delivery = await emailService.SendAsync(
@@ -328,6 +352,69 @@ public sealed class AccountService(
             delivery.Message,
             includePreviewLink && delivery.Status == "Preview" ? activationUrl : null,
             includePreviewLink && delivery.Status == "Preview" ? delivery.PreviewHtml : null);
+    }
+
+    /// <summary>Creates the matching Duck Creek User Admin account. Returns an error message, or null on success.</summary>
+    private async Task<string?> ProvisionDuckCreekUserAsync(
+        PortalUser user, CancellationToken cancellationToken)
+    {
+        int? entityId = user.Agency?.DuckCreekEntityId;
+        if (entityId is null && PortalRoles.IsInternal(user.Role))
+        {
+            entityId = duckCreekSettings.InternalEntityId;
+        }
+
+        if (entityId is null)
+        {
+            return $"{user.Agency?.Name ?? "The agency"} has no Duck Creek entity id.";
+        }
+
+        var fullName = $"{user.FirstName} {user.LastName}".Trim();
+        try
+        {
+            // FailIfExists stays false so retrying after a partial failure is safe.
+            await duckCreek.CreateUserAsync(
+                new DuckCreekCreateUserRequest(
+                    user.Email,
+                    fullName.Length > 0 ? fullName : user.Email,
+                    CreateDuckCreekPassword(),
+                    entityId.Value),
+                cancellationToken);
+        }
+        catch (DuckCreekUnavailableException exception)
+        {
+            return exception.Message;
+        }
+
+        user.DuckCreekUserName = user.Email;
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return null;
+    }
+
+    /// <summary>
+    /// Portal users never sign in to Duck Creek with this password, so it is random and not stored
+    /// by the portal. It satisfies typical complexity rules (upper, lower, digit, symbol).
+    /// </summary>
+    private static string CreateDuckCreekPassword()
+    {
+        const string upper = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+        const string lower = "abcdefghijkmnopqrstuvwxyz";
+        const string digits = "23456789";
+        const string symbols = "!@#$%^&*";
+        var all = upper + lower + digits + symbols;
+        var chars = new List<char>
+        {
+            upper[RandomNumberGenerator.GetInt32(upper.Length)],
+            lower[RandomNumberGenerator.GetInt32(lower.Length)],
+            digits[RandomNumberGenerator.GetInt32(digits.Length)],
+            symbols[RandomNumberGenerator.GetInt32(symbols.Length)]
+        };
+        while (chars.Count < 24)
+        {
+            chars.Add(all[RandomNumberGenerator.GetInt32(all.Length)]);
+        }
+
+        return new string(chars.OrderBy(_ => RandomNumberGenerator.GetInt32(int.MaxValue)).ToArray());
     }
 
     private string BuildActivationUrl(string token)

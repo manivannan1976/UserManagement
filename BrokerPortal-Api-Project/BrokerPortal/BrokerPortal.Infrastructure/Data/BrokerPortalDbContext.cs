@@ -9,6 +9,7 @@ public sealed class BrokerPortalDbContext(
     public DbSet<PortalUser> Users => Set<PortalUser>();
     public DbSet<UserInvitation> UserInvitations => Set<UserInvitation>();
     public DbSet<Agency> Agencies => Set<Agency>();
+    public DbSet<DuckCreekUser> DuckCreekUsers => Set<DuckCreekUser>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -30,6 +31,7 @@ public sealed class BrokerPortalDbContext(
         user.Property(x => x.EmailVerifiedAtUtc).HasColumnName("EmailVerifiedAt");
         user.Property(x => x.ActivatedAtUtc).HasColumnName("ActivatedAt");
         user.Property(x => x.DeactivatedAtUtc).HasColumnName("DeactivatedAt");
+        user.Property(x => x.DuckCreekUserName).HasMaxLength(256);
         user.HasOne(x => x.Agency).WithMany().HasForeignKey(x => x.AgencyId)
             .OnDelete(DeleteBehavior.Restrict);
 
@@ -40,6 +42,16 @@ public sealed class BrokerPortalDbContext(
         agency.Property(x => x.Name).HasMaxLength(200).IsRequired();
         agency.HasIndex(x => x.Name).IsUnique();
         agency.Property(x => x.DuckCreekAgencyId).HasMaxLength(100);
+        agency.Property(x => x.DuckCreekEntityId);
+
+        var duckCreekUser = modelBuilder.Entity<DuckCreekUser>();
+        duckCreekUser.ToTable("DuckCreekUsers");
+        duckCreekUser.HasKey(x => x.Id);
+        duckCreekUser.Property(x => x.Id).HasColumnName("DuckCreekUserId").UseIdentityColumn();
+        duckCreekUser.Property(x => x.UserName).HasMaxLength(256).IsRequired();
+        duckCreekUser.HasIndex(x => x.UserName).IsUnique();
+        duckCreekUser.Property(x => x.FullName).HasMaxLength(256).IsRequired();
+        duckCreekUser.Property(x => x.PasswordHash).HasMaxLength(512).IsRequired();
         agency.Property(x => x.AcceptedDomains).HasMaxLength(1000).IsRequired();
         agency.Property(x => x.Products).HasMaxLength(1000).IsRequired();
 

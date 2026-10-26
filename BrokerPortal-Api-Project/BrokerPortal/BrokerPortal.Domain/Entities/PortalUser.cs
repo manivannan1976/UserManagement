@@ -16,6 +16,9 @@ public sealed class PortalUser
     public DateTime? ActivatedAtUtc { get; set; }
     public DateTime? DeactivatedAtUtc { get; set; }
     public int? AgencyId { get; set; }
+
+    /// <summary>User name of the matching Duck Creek User Admin account, once provisioned.</summary>
+    public string? DuckCreekUserName { get; set; }
     public Agency? Agency { get; set; }
     public byte[] RowVersion { get; set; } = [];
     public ICollection<UserInvitation> Invitations { get; set; } = [];
